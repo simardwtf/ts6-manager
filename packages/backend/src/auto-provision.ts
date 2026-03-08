@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../../generated/prisma/index.js';
+import type { PrismaClient } from '../generated/prisma/index.js';
 import { SshQueryClient } from './bot-engine/ssh-query-client.js';
 import { encrypt } from './utils/crypto.js';
 import { parseQueryResponse } from '@ts6/common';
