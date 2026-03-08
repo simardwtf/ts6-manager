@@ -478,12 +478,12 @@ function M3uBrowserPanel({
       {/* Delete playlist confirm */}
       <ConfirmDialog
         open={deletePlaylistId !== null}
+        onOpenChange={(v) => { if (!v) setDeletePlaylistId(null); }}
         title="Delete Playlist"
         description="This will permanently remove the playlist and all its entries."
         confirmLabel="Delete"
-        variant="destructive"
+        destructive
         onConfirm={() => { if (deletePlaylistId != null) deletePlaylist.mutate(deletePlaylistId); setDeletePlaylistId(null); }}
-        onCancel={() => setDeletePlaylistId(null)}
       />
     </div>
   );
@@ -630,8 +630,9 @@ export default function VideoBots() {
         <EmptyState
           title="No video bots yet"
           description="Create a video bot to start streaming IPTV channels, TV shows and movies into your TeamSpeak server."
-          action={{ label: 'Create Video Bot', onClick: () => setCreateOpen(true) }}
-        />
+        >
+          <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-1.5" /> Create Video Bot</Button>
+        </EmptyState>
       ) : (
         <div className="flex gap-6 flex-1 min-h-0">
           {/* Bot list */}
@@ -712,12 +713,12 @@ export default function VideoBots() {
 
       <ConfirmDialog
         open={deleteBotId !== null}
+        onOpenChange={(v) => { if (!v) setDeleteBotId(null); }}
         title="Delete Video Bot"
         description="This will permanently remove the video bot."
         confirmLabel="Delete"
-        variant="destructive"
+        destructive
         onConfirm={() => { if (deleteBotId != null) deleteBot.mutate(deleteBotId); setDeleteBotId(null); if (selectedBotId === deleteBotId) setSelectedBotId(null); }}
-        onCancel={() => setDeleteBotId(null)}
       />
     </div>
   );
