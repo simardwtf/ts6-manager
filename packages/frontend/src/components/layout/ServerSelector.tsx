@@ -5,21 +5,26 @@ import { useServerStore } from '@/stores/server.store';
 import { Server } from 'lucide-react';
 
 export function ServerSelector() {
-  const { selectedConfigId, selectedSid, setServer, setSid } = useServerStore();
+  const { selectedConfigId, selectedSid, setServer, setSid, clearServer } = useServerStore();
   const { data: servers } = useServers();
   const { data: virtualServers } = useVirtualServers();
 
-  // Auto-select first server if none selected
+  // Auto-select first server if none selected, or if stored ID no longer exists
   useEffect(() => {
-    if (!selectedConfigId && servers?.length > 0) {
-      setServer(servers[0].id);
+    if (!servers) return;
+    const ids = servers.map((s: any) => s.id);
+    if (!selectedConfigId || !ids.includes(selectedConfigId)) {
+      if (servers.length > 0) setServer(servers[0].id);
+      else clearServer();
     }
-  }, [servers, selectedConfigId, setServer]);
+  }, [servers, selectedConfigId, setServer, clearServer]);
 
-  // Auto-select first virtual server
+  // Auto-select first virtual server; reset stale sid when switching servers
   useEffect(() => {
-    if (selectedConfigId && !selectedSid && virtualServers?.length > 0) {
-      setSid(virtualServers[0].virtualserver_id);
+    if (!selectedConfigId || !virtualServers) return;
+    const ids = virtualServers.map((vs: any) => vs.virtualserver_id);
+    if (!selectedSid || !ids.includes(selectedSid)) {
+      if (virtualServers.length > 0) setSid(virtualServers[0].virtualserver_id);
     }
   }, [virtualServers, selectedConfigId, selectedSid, setSid]);
 
