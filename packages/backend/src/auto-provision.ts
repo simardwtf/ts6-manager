@@ -22,14 +22,17 @@ export async function autoProvision(
 
   if (!host || !sshPassword) return;
 
-  const existing = await prisma.tsServerConfig.count();
-  if (existing > 0) return;
-
   const sshPort  = parseInt(process.env.TS_AUTOCONFIG_SSH_PORT  || '10022');
   const httpPort = parseInt(process.env.TS_AUTOCONFIG_HTTP_PORT || '10080');
   const name     = process.env.TS_AUTOCONFIG_NAME || 'TeamSpeak Server';
 
-  console.log('[AutoProvision] No server config found — connecting to bundled TS6 server to generate API key...');
+  // Skip if this specific host is already configured (safe to run every boot)
+  const existing = await prisma.tsServerConfig.findFirst({
+    where: { host, webqueryPort: httpPort },
+  });
+  if (existing) return;
+
+  console.log('[AutoProvision] No config for bundled TS6 server — connecting to generate API key...');
 
   const ssh = new SshQueryClient({ host, port: sshPort, username: 'serveradmin', password: sshPassword });
 
