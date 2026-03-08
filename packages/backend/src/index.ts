@@ -43,8 +43,8 @@ async function main() {
   });
 
   // Auto-provision bundled TS6 server on first boot (no-op if config already exists)
+  await autoProvision(prisma);
   const connectionPool = new ConnectionPool(prisma);
-  await autoProvision(prisma, connectionPool);
   await connectionPool.initialize();
 
   // Make services available via app.locals

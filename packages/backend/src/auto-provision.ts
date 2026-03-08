@@ -1,22 +1,21 @@
 import type { PrismaClient } from '../../generated/prisma/index.js';
 import { SshQueryClient } from './bot-engine/ssh-query-client.js';
-import type { ConnectionPool } from './ts-client/connection-pool.js';
 import { encrypt } from './utils/crypto.js';
 import { parseQueryResponse } from '@ts6/common';
 
 /**
  * On the very first boot of the bundled stack, auto-provision the TS6 server
  * connection: SSH into the TS6 server query, generate a manage-scoped API key,
- * encrypt it, and persist it as a TsServerConfig so the manager connects
- * automatically — no manual setup required.
+ * encrypt it, and persist it as a TsServerConfig.
  *
- * Safe to call every boot; exits immediately if a config already exists.
- * Triggered by TS_AUTOCONFIG_HOST + TS_AUTOCONFIG_SSH_PASSWORD env vars.
+ * Safe to call every boot — exits immediately if a config for this host already
+ * exists. Triggered only when TS_AUTOCONFIG_HOST + TS_AUTOCONFIG_SSH_PASSWORD
+ * are set (i.e. in the bundled docker-compose).
+ *
+ * connectionPool.initialize() runs right after this in index.ts, so we only
+ * need to write the DB record here — the pool load happens automatically.
  */
-export async function autoProvision(
-  prisma: PrismaClient,
-  connectionPool: ConnectionPool,
-): Promise<void> {
+export async function autoProvision(prisma: PrismaClient): Promise<void> {
   const host        = process.env.TS_AUTOCONFIG_HOST;
   const sshPassword = process.env.TS_AUTOCONFIG_SSH_PASSWORD;
 
@@ -26,7 +25,7 @@ export async function autoProvision(
   const httpPort = parseInt(process.env.TS_AUTOCONFIG_HTTP_PORT || '10080');
   const name     = process.env.TS_AUTOCONFIG_NAME || 'TeamSpeak Server';
 
-  // Skip if this specific host is already configured (safe to run every boot)
+  // Skip if this specific host:port is already in the DB (idempotent on every boot)
   const existing = await prisma.tsServerConfig.findFirst({
     where: { host, webqueryPort: httpPort },
   });
@@ -37,14 +36,16 @@ export async function autoProvision(
   const ssh = new SshQueryClient({ host, port: sshPort, username: 'serveradmin', password: sshPassword });
 
   // TS6 may still be initialising — retry SSH with backoff for up to ~90 s
+  let connected = false;
   for (let attempt = 1; attempt <= 12; attempt++) {
     try {
       await ssh.connect();
+      connected = true;
       break;
     } catch (err: any) {
       if (attempt === 12) {
-        ssh.destroy();
         console.error('[AutoProvision] Failed to connect to TS6 SSH after 12 attempts:', err.message);
+        ssh.destroy();
         return;
       }
       const delay = Math.min(5000 + attempt * 3000, 30000);
@@ -52,6 +53,8 @@ export async function autoProvision(
       await new Promise(r => setTimeout(r, delay));
     }
   }
+
+  if (!connected) return;
 
   try {
     // Generate a never-expiring manage-scope WebQuery API key
@@ -64,7 +67,7 @@ export async function autoProvision(
       return;
     }
 
-    const record = await prisma.tsServerConfig.create({
+    await prisma.tsServerConfig.create({
       data: {
         name,
         host,
@@ -75,10 +78,7 @@ export async function autoProvision(
       },
     });
 
-    // Add to the live connection pool so the backend can serve requests immediately
-    connectionPool.addClient(record.id, host, httpPort, apiKey, false);
-
-    console.log(`[AutoProvision] Done — server config created (id=${record.id}), connected to ${host}:${httpPort}`);
+    console.log(`[AutoProvision] Done — created server config "${name}" → ${host}:${httpPort}`);
   } catch (err: any) {
     console.error('[AutoProvision] Error during provisioning:', err.message);
   } finally {
