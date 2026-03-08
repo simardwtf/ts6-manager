@@ -62,8 +62,10 @@ model TsServerConfig {
   botFlows      BotFlow[]
   botLogs       BotExecutionLog[]
   musicBots     MusicBot[]
+  videoBots     VideoBot[]
   songs         Song[]
   radioStations RadioStation[]
+  m3uPlaylists  M3uPlaylist[]
   widgets       Widget[]
 }
 
@@ -199,6 +201,52 @@ model RadioStation {
   serverConfigId Int
   serverConfig   TsServerConfig @relation(fields: [serverConfigId], references: [id], onDelete: Cascade)
   createdAt      DateTime       @default(now())
+}
+
+// === Video Bot / IPTV Streaming Models ===
+
+model VideoBot {
+  id              Int       @id @default(autoincrement())
+  name            String
+  serverConfigId  Int
+  serverConfig    TsServerConfig @relation(fields: [serverConfigId], references: [id], onDelete: Cascade)
+  nickname        String    @default("VideoBot")
+  serverPassword  String?
+  defaultChannel  String?
+  channelPassword String?
+  volume          Int       @default(50)
+  identityData    String?
+  autoStart       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model M3uPlaylist {
+  id             Int            @id @default(autoincrement())
+  name           String
+  url            String
+  serverConfigId Int
+  serverConfig   TsServerConfig @relation(fields: [serverConfigId], references: [id], onDelete: Cascade)
+  lastFetched    DateTime?
+  entryCount     Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  entries M3uEntry[]
+}
+
+model M3uEntry {
+  id           Int         @id @default(autoincrement())
+  playlistId   Int
+  playlist     M3uPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  name         String
+  groupTitle   String?
+  tvgLogo      String?
+  url          String
+  position     Int         @default(0)
+
+  @@index([playlistId])
+  @@index([playlistId, groupTitle])
 }
 
 // === Server Widget / Banner ===
