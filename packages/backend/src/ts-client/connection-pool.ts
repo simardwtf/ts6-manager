@@ -13,8 +13,12 @@ export class ConnectionPool {
     });
 
     for (const server of servers) {
-      // H8: Decrypt API key before use
-      this.addClient(server.id, server.host, server.webqueryPort, decrypt(server.apiKey), server.useHttps);
+      try {
+        // H8: Decrypt API key before use
+        this.addClient(server.id, server.host, server.webqueryPort, decrypt(server.apiKey), server.useHttps);
+      } catch {
+        console.warn(`[ConnectionPool] Skipping server ${server.id} (${server.name}): API key could not be decrypted. Re-save the server config to fix this.`);
+      }
     }
 
     console.log(`[ConnectionPool] Initialized ${this.clients.size} server connection(s)`);
