@@ -1,45 +1,54 @@
 # docker-compose.bundled.yml
 # ─────────────────────────────────────────────────────────────────────────────
-# All-in-one stack: TeamSpeak 6 server + TS6 Manager (backend + frontend).
-# Everything is pre-wired — just copy .env.bundled.example → .env and run:
+# All-in-one zero-config stack: TeamSpeak 6 server + TS6 Manager.
 #
+#   git clone <this-repo>
+#   cd ts6-manager
 #   docker compose -f docker-compose.bundled.yml up -d
 #
-# NOTE: Update the `teamspeak` image tag below to match whatever Docker image
-# your TS6 distribution ships. The env vars shown assume the official TS6 image
-# supports TS6_WEBQUERY_APIKEY; adjust if your build uses a different var name.
+# That's it. On first boot the manager automatically SSHs into the TS6 server,
+# generates a WebQuery API key, and wires everything up. No manual steps.
+#
+# Optional: create a .env file to override any value below.
 # ─────────────────────────────────────────────────────────────────────────────
-
-version: '3.8'
 
 services:
 
   # ── TeamSpeak 6 Server ───────────────────────────────────────────────────
   teamspeak:
-    image: ${TS6_IMAGE:-teamspeak/teamspeak6-server:latest}
+    image: teamspeaksystems/teamspeak6-server:latest
     container_name: ts6-server
     restart: unless-stopped
     environment:
-      # Pre-configure the WebQuery API key so the manager can connect
-      # automatically. Change this value in your .env file.
-      - TS6_WEBQUERY_APIKEY=${TS_APIKEY:?TS_APIKEY must be set in .env}
-      # Accept the license if required by your TS6 image:
-      - TS6_LICENSE_ACCEPTED=${TS6_LICENSE_ACCEPTED:-accept}
+      - TSSERVER_LICENSE_ACCEPTED=accept
+      # Voice
+      - TSSERVER_DEFAULT_PORT=9987
+      # WebQuery HTTP (required by the manager)
+      - TSSERVER_QUERY_HTTP_ENABLED=true
+      - TSSERVER_QUERY_HTTP_PORT=10080
+      # SSH ServerQuery (used on first boot to generate the WebQuery API key)
+      - TSSERVER_QUERY_SSH_ENABLED=true
+      - TSSERVER_QUERY_SSH_PORT=10022
+      # serveradmin password — change this in production
+      - TSSERVER_QUERY_ADMIN_PASSWORD=${TS_ADMIN_PASSWORD:-serveradmin}
+      # File transfer
+      - TSSERVER_FILE_TRANSFER_PORT=30033
     ports:
-      - "${TS_VOICE_PORT:-9987}:9987/udp"   # Voice
-      - "${TS_WEBQUERY_PORT:-10080}:10080"   # WebQuery HTTP (internal only if you prefer)
-      - "${TS_SSH_PORT:-10022}:10022"        # ServerQuery SSH
+      - "${TS_VOICE_PORT:-9987}:9987/udp"    # Voice
+      - "${TS_FT_PORT:-30033}:30033/tcp"     # File transfer
+      - "${TS_WEBQUERY_PORT:-10080}:10080/tcp" # WebQuery (optional: remove to keep internal-only)
+      - "${TS_SSH_PORT:-10022}:10022/tcp"    # SSH ServerQuery (optional: remove after first boot)
     volumes:
-      - ts6-data:/opt/ts6/data
+      - ts6-data:/var/tsserver
     networks:
       - ts6-network
     healthcheck:
-      # The /version endpoint requires no auth — good liveness signal
-      test: ["CMD-SHELL", "curl -sf http://localhost:10080/version || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
+      # Port 10080 accepting TCP = TS6 is up and WebQuery is ready
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10080' 2>/dev/null && exit 0 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 24        # wait up to 2 minutes for first boot
+      start_period: 10s
 
   # ── TS6 Manager Backend ──────────────────────────────────────────────────
   backend:
@@ -55,19 +64,20 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - DATABASE_URL=file:/app/packages/backend/data/ts6webui.db
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      # Change JWT_SECRET in production: openssl rand -hex 32
+      - JWT_SECRET=${JWT_SECRET:-bundled-default-change-me-in-production}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - JWT_ACCESS_EXPIRY=15m
       - JWT_REFRESH_EXPIRY=7d
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://localhost:${MANAGER_PORT:-3000}
       - MUSIC_DIR=/data/music
 
-      # ── Auto-seed the TS server connection on first boot ─────────────────
+      # ── Auto-provisioning — connects to TS6 on first boot to generate API key
       - TS_AUTOCONFIG_HOST=teamspeak
-      - TS_AUTOCONFIG_PORT=10080
-      - TS_AUTOCONFIG_APIKEY=${TS_APIKEY}
-      - TS_AUTOCONFIG_NAME=${TS_AUTOCONFIG_NAME:-My TeamSpeak Server}
-      - TS_AUTOCONFIG_HTTPS=false
+      - TS_AUTOCONFIG_HTTP_PORT=10080
+      - TS_AUTOCONFIG_SSH_PORT=10022
+      - TS_AUTOCONFIG_SSH_PASSWORD=${TS_ADMIN_PASSWORD:-serveradmin}
+      - TS_AUTOCONFIG_NAME=${TS_SERVER_NAME:-My TeamSpeak Server}
     volumes:
       - backend-data:/app/packages/backend/data
       - music-data:/data/music
@@ -92,11 +102,8 @@ services:
 
 volumes:
   ts6-data:
-    driver: local
   backend-data:
-    driver: local
   music-data:
-    driver: local
 
 networks:
   ts6-network:

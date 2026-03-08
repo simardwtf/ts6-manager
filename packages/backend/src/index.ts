@@ -8,6 +8,7 @@ import { VoiceBotManager } from './voice/voice-bot-manager.js';
 import { VideoBotManager } from './voice/video-bot-manager.js';
 import { MusicCommandHandler } from './voice/music-command-handler.js';
 import { config } from './config.js';
+import { autoProvision } from './auto-provision.js';
 import jwt from 'jsonwebtoken';
 
 async function main() {
@@ -41,8 +42,9 @@ async function main() {
     },
   });
 
-  // Initialize TS connection pool
+  // Auto-provision bundled TS6 server on first boot (no-op if config already exists)
   const connectionPool = new ConnectionPool(prisma);
+  await autoProvision(prisma, connectionPool);
   await connectionPool.initialize();
 
   // Make services available via app.locals
