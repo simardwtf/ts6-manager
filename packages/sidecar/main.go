@@ -584,6 +584,13 @@ func (s *Sidecar) CreatePeer(id string) (sdp string, err error) {
 			MimeType:  webrtc.MimeTypeOpus,
 			ClockRate: 48000,
 			Channels:  2,
+			// Declare stereo Opus in the offer. ffmpeg encodes stereo Opus
+			// (-ac 2), and the TS6 client negotiates stereo (stereo=1;
+			// sprop-stereo=1) in its answer — but without advertising it in the
+			// offer, the client sets up a mono playout path and the incoming
+			// stereo stream is not rendered (silent). Matching the fmtp the TS6
+			// client itself uses makes stream audio play.
+			SDPFmtpLine: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;usedtx=0",
 		},
 		PayloadType: 111,
 	}, webrtc.RTPCodecTypeAudio); err != nil {
