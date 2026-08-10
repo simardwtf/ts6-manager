@@ -11,6 +11,7 @@ const MUSIC_COMMANDS = new Set([
   'radio', 'play', 'stop', 'pause', 'skip', 'next', 'prev',
   'vol', 'volume', 'np', 'nowplaying', 'queue', 'add',
   'stream', 'stopstream', 'viewers',
+  'channels', 'tv', 'iptv',
 ]);
 
 /**
@@ -107,6 +108,13 @@ export class MusicCommandHandler {
           break;
         case 'viewers':
           this.handleViewers(bot, userClid);
+          break;
+        case 'channels':
+          await this.handleChannels(bot, userClid, args);
+          break;
+        case 'tv':
+        case 'iptv':
+          await this.handleTv(bot, userClid, args);
           break;
       }
     } catch (err: any) {
@@ -445,6 +453,73 @@ export class MusicCommandHandler {
     }
     await bot.stopVideoStream();
     this.reply(bot, userClid, 'Video stream stopped.');
+  }
+
+  // ─── IPTV Commands ────────────────────────────────────────
+
+  /** !channels [search] — list IPTV channels available on this bot's server. */
+  private async handleChannels(bot: VoiceBot, userClid: number, args: string): Promise<void> {
+    const serverConfigId = bot.currentConfig.serverConfigId;
+    if (!serverConfigId) {
+      this.reply(bot, userClid, 'No server configured for this bot.');
+      return;
+    }
+    const search = args.trim();
+    const channels = await this.prisma.iptvChannel.findMany({
+      where: {
+        playlist: { serverConfigId },
+        ...(search ? { name: { contains: search } } : {}),
+      },
+      orderBy: { position: 'asc' },
+      take: 20,
+    });
+
+    if (channels.length === 0) {
+      this.reply(bot, userClid, search
+        ? `No IPTV channels matching "${search}". Add a playlist in the IPTV page.`
+        : 'No IPTV channels found. Add a playlist in the IPTV page.');
+      return;
+    }
+
+    const list = channels.map((c: any) => `• ${c.name}`).join('\n');
+    this.reply(bot, userClid, `IPTV channels${search ? ` matching "${search}"` : ''} (first ${channels.length}):\n${list}\n\nUse !tv <name> to stream one.`);
+  }
+
+  /** !tv <name> — find a channel by name and stream it to the channel. */
+  private async handleTv(bot: VoiceBot, userClid: number, args: string): Promise<void> {
+    const query = args.trim();
+    if (!query) {
+      this.reply(bot, userClid, 'Usage: !tv <channel name>  — Use !channels to list.');
+      return;
+    }
+    const serverConfigId = bot.currentConfig.serverConfigId;
+    if (!serverConfigId) {
+      this.reply(bot, userClid, 'No server configured for this bot.');
+      return;
+    }
+
+    const channel = await this.prisma.iptvChannel.findFirst({
+      where: { playlist: { serverConfigId }, name: { contains: query } },
+      orderBy: { position: 'asc' },
+    });
+    if (!channel) {
+      this.reply(bot, userClid, `No channel matching "${query}". Use !channels ${query} to search.`);
+      return;
+    }
+
+    if (bot.videoStreaming) {
+      await bot.setVideoSource(channel.url);
+      this.reply(bot, userClid, `Now streaming: ${channel.name}`);
+      return;
+    }
+
+    this.reply(bot, userClid, `Starting stream: ${channel.name}...`);
+    try {
+      await bot.startVideoStream(channel.url);
+      this.reply(bot, userClid, `Video stream started: ${channel.name}`);
+    } catch (err: any) {
+      this.reply(bot, userClid, `Failed to start stream: ${err.message}`);
+    }
   }
 
   private handleViewers(bot: VoiceBot, userClid: number): void {

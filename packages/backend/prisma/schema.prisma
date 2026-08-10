@@ -66,6 +66,7 @@ model TsServerConfig {
   radioStations RadioStation[]
   widgets       Widget[]
   musicRequests MusicRequest[]
+  iptvPlaylists IptvPlaylist[]
 }
 
 model BotFlow {
@@ -203,6 +204,40 @@ model RadioStation {
   serverConfigId Int
   serverConfig   TsServerConfig @relation(fields: [serverConfigId], references: [id], onDelete: Cascade)
   createdAt      DateTime       @default(now())
+}
+
+// === IPTV ===
+// An M3U/M3U8 playlist source (Xtream/Threadfin/Dispatcharr output, or any M3U URL).
+// Its channels are streamed to TS6 through a MusicBot's WebRTC video sidecar.
+
+model IptvPlaylist {
+  id                Int            @id @default(autoincrement())
+  name              String
+  url               String
+  serverConfigId    Int
+  serverConfig      TsServerConfig @relation(fields: [serverConfigId], references: [id], onDelete: Cascade)
+  autoRefreshMinutes Int           @default(0) // 0 = manual refresh only
+  lastRefreshedAt   DateTime?
+  lastError         String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  channels IptvChannel[]
+}
+
+model IptvChannel {
+  id         Int          @id @default(autoincrement())
+  playlistId Int
+  playlist   IptvPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  name       String
+  url        String
+  logo       String?
+  groupTitle String?
+  tvgId      String?
+  position   Int          @default(0)
+
+  @@index([playlistId])
+  @@index([playlistId, name])
 }
 
 // === Server Widget / Banner ===
