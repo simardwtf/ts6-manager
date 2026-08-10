@@ -8,6 +8,7 @@ import { SidecarClient } from './streaming/sidecar-client.js';
 import { SidecarProcess, type SidecarConfig } from './streaming/sidecar-process.js';
 import { STREAM_PRESETS, DEFAULT_PRESET, type VideoViewerInfo, type VideoStreamStatus } from './streaming/types.js';
 import { getCookieArgs } from './audio/youtube.js';
+import { StreamAudioPlayer } from './stream-audio-player.js';
 import { spawn } from 'child_process';
 
 /** Resolve a YouTube/yt-dlp-compatible URL to a direct stream URL */
@@ -79,6 +80,8 @@ export interface VoiceBotConfig {
 export class VoiceBot extends EventEmitter {
   private client: Ts3Client;
   private pipeline: AudioPipeline;
+  /** Delivers a video stream's audio into the voice channel (TS6 doesn't render stream audio for viewers). */
+  private streamAudio: StreamAudioPlayer | null = null;
   readonly queue: PlayQueue;
   private config: VoiceBotConfig;
   private _status: VoiceBotStatus = 'stopped';
@@ -138,6 +141,7 @@ export class VoiceBot extends EventEmitter {
     this._originalNickname = config.nickname;
     this.client = new Ts3Client();
     this.pipeline = new AudioPipeline();
+    this.streamAudio = new StreamAudioPlayer(this.client, () => this.config.volume);
     this.queue = new PlayQueue();
 
     this.client.on('error', (err) => {
@@ -340,6 +344,7 @@ export class VoiceBot extends EventEmitter {
     if (this._videoStreaming) {
       await this.stopVideoStream();
     }
+    this.streamAudio?.stop();
     this.client.disconnect();
   }
 
@@ -869,6 +874,10 @@ export class VoiceBot extends EventEmitter {
       effectiveBitrate,
     );
 
+    // Deliver the stream's audio via the voice channel — TS6 does not render
+    // the WebRTC stream audio track for viewers, so play it as voice instead.
+    this.startStreamAudioSafe(resolvedSource);
+
     console.log(`[VoiceBot ${this.config.id}] Video stream started: ${stream.id}, source: ${source}`);
     this.emit('videoStreamStarted', { streamId: stream.id, source, preset: this._videoPreset });
     this.emit('statusChange', this._status);
@@ -877,6 +886,9 @@ export class VoiceBot extends EventEmitter {
   /** Stop video streaming */
   async stopVideoStream(): Promise<void> {
     if (!this._videoStreaming) return;
+
+    // Stop the voice-channel audio that accompanies the video.
+    this.streamAudio?.stop();
 
     // Remove all viewers from TS6 stream first
     if (this.signaling && this._activeStreamId) {
@@ -934,8 +946,24 @@ export class VoiceBot extends EventEmitter {
       this._videoFramerate,
       this._videoBitrate,
     );
+    // Switch the voice-channel audio to the new source too.
+    this.startStreamAudioSafe(resolvedSource);
+
     console.log(`[VoiceBot ${this.config.id}] Video source changed: ${source}`);
     this.emit('videoSourceChanged', source);
+  }
+
+  /** Start voice-channel audio for a stream source; never throws (video must not depend on it). */
+  private startStreamAudioSafe(resolvedSource: string): void {
+    if (!this.streamAudio) return;
+    // The audio pipeline only accepts http/https sources (SSRF-guarded).
+    if (!/^https?:\/\//i.test(resolvedSource)) {
+      this.streamAudio.stop();
+      return;
+    }
+    this.streamAudio.start(resolvedSource).catch((err) => {
+      console.warn(`[VoiceBot ${this.config.id}] Stream audio failed: ${err?.message ?? err}`);
+    });
   }
 
   /** Kick a viewer from the video stream */
