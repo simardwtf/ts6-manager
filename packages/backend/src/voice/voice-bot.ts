@@ -993,12 +993,30 @@ export class VoiceBot extends EventEmitter {
     });
   }
 
+  /** Extract the audio m-section (and its key attributes) from an SDP for diagnostics. */
+  private static audioSdpSummary(sdp: string): string {
+    const lines = sdp.split(/\r?\n/);
+    const out: string[] = [];
+    let inAudio = false;
+    for (const line of lines) {
+      if (line.startsWith('m=')) inAudio = line.startsWith('m=audio');
+      if (inAudio && (line.startsWith('m=audio') || line.startsWith('a=rtpmap') ||
+        line.startsWith('a=fmtp') || line.startsWith('a=sendonly') || line.startsWith('a=recvonly') ||
+        line.startsWith('a=sendrecv') || line.startsWith('a=inactive') || line.startsWith('a=mid') ||
+        line.startsWith('a=ssrc') || line.startsWith('c='))) {
+        out.push(line.trim());
+      }
+    }
+    return out.length ? out.join(' | ') : '(no audio m-section found)';
+  }
+
   private async handleSignalingMessage(msg: SignalingMessage): Promise<void> {
     if (!this.sidecarHttp) return;
 
     switch (msg.type) {
       case 'answer':
         if (msg.sdp && msg.clid) {
+          console.log(`[VoiceBot ${this.config.id}] TS ANSWER audio (clid=${msg.clid}): ${VoiceBot.audioSdpSummary(msg.sdp)}`);
           try {
             await this.sidecarHttp.setAnswer(String(msg.clid), msg.sdp);
           } catch (err: any) {
@@ -1040,6 +1058,7 @@ export class VoiceBot extends EventEmitter {
       }
 
       const result = await this.sidecarHttp.createPeer(String(viewerClid));
+      console.log(`[VoiceBot ${this.config.id}] OFFER audio (clid=${viewerClid}): ${VoiceBot.audioSdpSummary(result.sdp)}`);
 
       const viewer: VideoViewerInfo = {
         clid: viewerClid,
