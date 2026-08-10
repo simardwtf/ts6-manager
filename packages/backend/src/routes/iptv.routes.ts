@@ -177,3 +177,26 @@ iptvRoutes.post('/stop', async (req: Request, res: Response, next) => {
     res.json({ success: true });
   } catch (err) { next(err); }
 });
+
+// GET /audio-delay/:botId — current A/V sync delay (ms)
+iptvRoutes.get('/audio-delay/:botId', async (req: Request, res: Response, next) => {
+  try {
+    const manager: VoiceBotManager = req.app.locals.voiceBotManager;
+    const bot = manager.getBot(parseInt(req.params.botId as string));
+    if (!bot) throw new AppError(404, 'Music bot not found or not running');
+    res.json({ delayMs: bot.getStreamAudioDelay() });
+  } catch (err) { next(err); }
+});
+
+// POST /audio-delay — adjust A/V sync delay (ms) live. Body: { botId, delayMs }
+iptvRoutes.post('/audio-delay', async (req: Request, res: Response, next) => {
+  try {
+    const manager: VoiceBotManager = req.app.locals.voiceBotManager;
+    const { botId, delayMs } = req.body;
+    if (botId == null || delayMs == null) throw new AppError(400, 'botId and delayMs are required');
+    const bot = manager.getBot(parseInt(botId));
+    if (!bot) throw new AppError(404, 'Music bot not found or not running');
+    const applied = bot.setStreamAudioDelay(parseInt(delayMs));
+    res.json({ success: true, delayMs: applied });
+  } catch (err) { next(err); }
+});

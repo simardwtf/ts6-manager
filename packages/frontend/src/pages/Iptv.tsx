@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   useIptvPlaylists, useCreateIptvPlaylist, useDeleteIptvPlaylist, useRefreshIptvPlaylist,
-  useIptvGroups, useIptvChannels, useIptvStream, useIptvStop,
+  useIptvGroups, useIptvChannels, useIptvStream, useIptvStop, useSetAudioDelay,
 } from '@/hooks/use-iptv';
+import { Slider } from '@/components/ui/slider';
 import { useMusicBots } from '@/hooks/use-music-bots';
 import { useServers } from '@/hooks/use-servers';
 import { useServerStore } from '@/stores/server.store';
@@ -51,6 +52,10 @@ function ChannelBrowser({ playlist, bots }: { playlist: IptvPlaylistSummary; bot
 
   const stream = useIptvStream();
   const stop = useIptvStop();
+  const setAudioDelay = useSetAudioDelay();
+
+  // A/V sync: how far to hold audio back (ms) to line it up with the delayed video.
+  const [audioDelay, setAudioDelayValue] = useState(2000);
 
   // Running music bots on this playlist's server can act as the streamer.
   const eligibleBots = bots.filter(
@@ -102,6 +107,22 @@ function ChannelBrowser({ playlist, bots }: { playlist: IptvPlaylistSummary; bot
             </SelectContent>
           </Select>
         </div>
+        {botId && (
+          <div className="space-y-1 min-w-[180px]">
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              A/V sync — audio delay: {audioDelay} ms
+            </Label>
+            <Slider
+              value={[audioDelay]}
+              min={0}
+              max={6000}
+              step={100}
+              onValueChange={(v) => setAudioDelayValue(v[0])}
+              onValueCommit={(v) => setAudioDelay.mutate({ botId: parseInt(botId), delayMs: v[0] })}
+              className="w-[180px]"
+            />
+          </div>
+        )}
         {botId && (
           <Button
             variant="outline"

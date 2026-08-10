@@ -20,4 +20,9 @@ export const iptvApi = {
   stream: (botId: number, channelId: number, preset?: string) =>
     api.post('/iptv/stream', { botId, channelId, preset }).then((r) => r.data),
   stop: (botId: number) => api.post('/iptv/stop', { botId }).then((r) => r.data),
+
+  // A/V sync: audio delay (ms)
+  getAudioDelay: (botId: number) => api.get(`/iptv/audio-delay/${botId}`).then((r) => r.data),
+  setAudioDelay: (botId: number, delayMs: number) =>
+    api.post('/iptv/audio-delay', { botId, delayMs }).then((r) => r.data),
 };

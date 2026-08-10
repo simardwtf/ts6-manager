@@ -77,3 +77,10 @@ export function useIptvStop() {
     mutationFn: (botId: number) => iptvApi.stop(botId),
   });
 }
+
+export function useSetAudioDelay() {
+  return useMutation({
+    mutationFn: ({ botId, delayMs }: { botId: number; delayMs: number }) =>
+      iptvApi.setAudioDelay(botId, delayMs),
+  });
+}

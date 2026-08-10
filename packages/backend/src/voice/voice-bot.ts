@@ -966,6 +966,16 @@ export class VoiceBot extends EventEmitter {
     });
   }
 
+  /** Current stream-audio delay (ms) used to sync voice audio to the delayed video. */
+  getStreamAudioDelay(): number {
+    return this.streamAudio?.getDelay() ?? 0;
+  }
+
+  /** Adjust the stream-audio delay (ms) live to line audio up with the video. */
+  setStreamAudioDelay(ms: number): number {
+    return this.streamAudio?.setDelay(ms) ?? 0;
+  }
+
   /** Kick a viewer from the video stream */
   async kickVideoViewer(clid: number): Promise<void> {
     if (!this._videoStreaming || !this.signaling || !this._activeStreamId) {
